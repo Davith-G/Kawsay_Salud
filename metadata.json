@@ -1,0 +1,8 @@
+{
+  "name": "Kawsay Salud",
+  "description": "Aplicación móvil para la integración de medicina tradicional y moderna en Cruz Loma, Chimborazo, utilizando inteligencia artificial.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ]
+}

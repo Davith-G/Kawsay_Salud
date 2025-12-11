@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KawsaySalud</string>
+    <string name="title_activity_main">KawsaySalud</string>
+    <string name="package_name">com.kawsay.salud</string>
+    <string name="custom_url_scheme">com.kawsay.salud</string>
+</resources>
