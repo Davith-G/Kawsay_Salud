@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 import BottomNav from './components/BottomNav';
 import HomeView from './components/HomeView';
 import ChatView from './components/ChatView';
@@ -11,7 +10,6 @@ import { TRANSLATIONS } from './constants';
 import { SettingsIcon, SunIcon, MoonIcon, SystemIcon, LogoIcon } from './components/Icons';
 import { Geolocation } from "@capacitor/geolocation";
 import { VoiceRecorder } from 'capacitor-voice-recorder';
-
 
 
 // --- Theme Context & Logic ---
@@ -126,7 +124,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-md animate-fade-in" onClick={onClose}>
       <div 
-        className="bg-white/95 dark:bg-slate-800/95 w-full max-w-sm rounded-3xl p-6 shadow-2xl transform transition-all scale-100 animate-pop-in border border-white/20"
+        className="bg-white/95 dark:bg-slate-800/95 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-pop-in border border-white/20"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-6">
@@ -193,7 +191,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
            </div>
 
            <div className="pt-4 border-t border-gray-100 dark:border-slate-700">
-               <p className="text-center text-xs text-gray-400">Versión 1.3.0 - Kawsay Salud</p>
+               <p className="text-center text-xs text-gray-400">Versión 1.3.1 - Kawsay Salud</p>
            </div>
         </div>
       </div>
@@ -206,23 +204,19 @@ const MiniTutorial: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
     const { language } = useContext(LanguageContext);
     const [step, setStep] = useState(0);
 
-    // Grid of 5 items. Centers are roughly at 10%, 30%, 50%, 70%, 90%.
     const steps = [
         {
             text: language === 'qu' ? "Kaypi Hampi Yurakuna." : "Aquí encuentras plantas y remedios.",
-            // 2nd Item (Natural) - Center ~30%
             positionClass: "left-[30%]", 
             arrowClass: "left-1/2 -translate-x-1/2"
         },
         {
             text: language === 'qu' ? "Kaypi Yachakwan rimana." : "Aquí chatea con la IA Yachak.",
-            // 3rd Item (Chat) - Center ~50%
             positionClass: "left-1/2 -translate-x-1/2", 
             arrowClass: "left-1/2 -translate-x-1/2"
         },
         {
             text: language === 'qu' ? "Kaypi Hampi Wasikuna." : "Aquí busca hospitales y farmacias.",
-            // 4th Item (Map) - Center ~70%
             positionClass: "left-[70%]", 
             arrowClass: "left-1/2 -translate-x-1/2"
         }
@@ -240,23 +234,16 @@ const MiniTutorial: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
 
     return (
         <div className="fixed inset-0 z-[200] pointer-events-none">
-            {/* Dim background slightly */}
             <div className="absolute inset-0 bg-black/30 pointer-events-auto" onClick={onFinish}></div>
-
-            {/* Floating Card - Add key to force re-render animation on step change */}
             <div 
                 key={step}
                 className={`absolute bottom-24 ${currentStep.positionClass} -translate-x-1/2 transition-all duration-300 w-48 pointer-events-auto`}
             >
                 <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-xl border-2 border-emerald-500 relative animate-pop-in">
-                    
-                    {/* Arrow Pointing Down */}
                     <div className={`absolute -bottom-3 ${currentStep.arrowClass} w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[12px] border-t-emerald-500`}></div>
-                    
                     <p className="text-sm font-bold text-slate-800 dark:text-white text-center mb-3 leading-snug">
                         {currentStep.text}
                     </p>
-
                     <div className="flex justify-between items-center">
                         <button onClick={onFinish} className="text-xs text-gray-400 font-medium px-2 py-1">
                             {language === 'en' ? 'Skip' : 'Saltar'}
@@ -331,59 +318,47 @@ const LanguageSelectionModal: React.FC<{ onSelect: (lang: Language) => void }> =
 // --- Main App Component ---
 const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewName>(ViewName.HOME);
-  const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { setLanguage } = useContext(LanguageContext);
   
+  // Track loaded views for Keep-Alive performance (Lazy load first time, then keep)
+  const [loadedViews, setLoadedViews] = useState<Set<ViewName>>(new Set([ViewName.HOME]));
+
+  useEffect(() => {
+    // Add current view to loaded views set
+    setLoadedViews(prev => {
+        const newSet = new Set(prev);
+        newSet.add(currentView);
+        return newSet;
+    });
+  }, [currentView]);
+
   useEffect(() => {
     const solicitarPermisos = async () => {
       try {
-        // Permiso de ubicación
         const status = await Geolocation.requestPermissions();
         console.log("Estado del permiso:", status);
-
-        // Permiso de micrófono
         await solicitarPermisoMicrofono();
-
       } catch (error) {
         console.error("Error solicitando permisos:", error);
       }
     };
-
     solicitarPermisos();
   }, []);
 
-
   async function solicitarPermisoMicrofono() {
     try {
-      // Verificar si ya está concedido
       const permisoEstado = await VoiceRecorder.hasAudioRecordingPermission();
-
       if (!permisoEstado.value) {
-        // Solicitar permiso
         const permiso = await VoiceRecorder.requestAudioRecordingPermission();
-
-        if (permiso.value) {
-          console.log("Permiso de micrófono concedido");
-          return true;
-        } else {
-          console.log("Permiso de micrófono denegado");
-          return false;
-        }
+        return permiso.value;
       }
-
-      console.log("Permiso ya había sido concedido");
       return true;
-
     } catch (error) {
       console.error("Error solicitando permiso de micrófono:", error);
       return false;
     }
   }
-
-
-
-
 
   // Logic to show Language Modal on first visit
   const [showLanguageModal, setShowLanguageModal] = useState<boolean>(() => {
@@ -395,7 +370,6 @@ const AppContent: React.FC = () => {
   const [showTutorial, setShowTutorial] = useState<boolean>(false);
 
   useEffect(() => {
-    // Only verify tutorial if language is already selected
     if (!showLanguageModal) {
         const tutorialDone = localStorage.getItem('tutorialCompleted');
         if (!tutorialDone) {
@@ -407,7 +381,6 @@ const AppContent: React.FC = () => {
   const handleInitialLanguageSelect = (lang: Language) => {
       setLanguage(lang);
       setShowLanguageModal(false);
-      // Tutorial will trigger via useEffect
   };
 
   const handleTutorialFinish = () => {
@@ -415,134 +388,42 @@ const AppContent: React.FC = () => {
       setShowTutorial(false);
   };
 
-  // --- SWIPE LOGIC & ANIMATION DIRECTION ---
-  const touchStart = useRef<number | null>(null);
-  const touchEnd = useRef<number | null>(null);
-  const minSwipeDistance = 75; 
-
-  // Define View Order for Directional Animation
-  const viewsOrder = [ViewName.HOME, ViewName.NATURAL, ViewName.CHAT, ViewName.MAP, ViewName.AUXILIO];
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    touchEnd.current = null; 
-    touchStart.current = e.targetTouches[0].clientX;
-  }
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    touchEnd.current = e.targetTouches[0].clientX;
-  }
-
-  const onTouchEnd = () => {
-    if (!touchStart.current || !touchEnd.current) return;
-    
-    // Disable swipe on Map view to allow panning
-    if (currentView === ViewName.MAP) return;
-
-    const distance = touchStart.current - touchEnd.current;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-    
-    const currentIndex = viewsOrder.indexOf(currentView);
-
-    if (isLeftSwipe && currentIndex < viewsOrder.length - 1) {
-        // Next View (Swipe Left) -> Content comes from Right
-        handleChangeView(viewsOrder[currentIndex + 1]);
-    }
-
-    if (isRightSwipe && currentIndex > 0) {
-        // Prev View (Swipe Right) -> Content comes from Left
-        handleChangeView(viewsOrder[currentIndex - 1]);
-    }
-  }
-
   // --- HISTORY API (BACK BUTTON) ---
-  
-  // 1. Initialize history state ONLY ONCE on mount
   useEffect(() => {
     window.history.replaceState({ view: ViewName.HOME }, '');
   }, []);
 
-  // 2. Handle PopState
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
         if (event.state && event.state.view) {
-            // Determine direction for history navigation (simple approximation)
-            const oldIdx = viewsOrder.indexOf(currentView);
-            const newIdx = viewsOrder.indexOf(event.state.view);
-            setSlideDirection(newIdx > oldIdx ? 'right' : 'left');
             setCurrentView(event.state.view);
         } else {
-            // Fallback
             setCurrentView(ViewName.HOME);
         }
     };
-
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [currentView]); // Re-bind when currentView changes to compare accurately
+  }, []); 
 
   const handleChangeView = (newView: ViewName) => {
       if (newView === currentView) return;
-      
-      // Calculate Direction
-      const oldIdx = viewsOrder.indexOf(currentView);
-      const newIdx = viewsOrder.indexOf(newView);
-      
-      // If moving to higher index (Home->Chat), content should enter from Right.
-      // If moving to lower index (Chat->Home), content should enter from Left.
-      setSlideDirection(newIdx > oldIdx ? 'right' : 'left');
-
-      // Push new state to history stack
       window.history.pushState({ view: newView }, '');
       setCurrentView(newView);
   };
 
-  const renderView = () => {
-    // Determine animation class based on direction
-    const animationClass = slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left';
-
-    return (
-        <div key={currentView} className={`h-full w-full ${animationClass}`}>
-            {(() => {
-                switch (currentView) {
-                case ViewName.HOME:
-                    return <HomeView onChangeView={handleChangeView} />;
-                case ViewName.NATURAL:
-                    return <NaturalView />;
-                case ViewName.CHAT:
-                    return <ChatView />;
-                case ViewName.MAP:
-                    // Pass the settings handler to MapView
-                    return <MapView onOpenSettings={() => setIsSettingsOpen(true)} />;
-                case ViewName.AUXILIO:
-                    return <AuxilioView />;
-                default:
-                    return <HomeView onChangeView={handleChangeView} />;
-                }
-            })()}
-        </div>
-    );
-  };
-
   return (
     <div 
-        className="flex flex-col h-screen w-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-slate-950 dark:to-slate-900 overflow-hidden text-slate-800 dark:text-slate-100 font-sans transition-colors duration-300"
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        className="flex flex-col h-screen w-screen bg-gray-50 dark:bg-slate-950 overflow-hidden text-slate-800 dark:text-slate-100 font-sans"
     >
       {/* Initial Language Modal */}
       {showLanguageModal && <LanguageSelectionModal onSelect={handleInitialLanguageSelect} />}
 
-      {/* Mini Tutorial (Onboarding) - Replaces the large modal */}
+      {/* Mini Tutorial */}
       {!showLanguageModal && showTutorial && <MiniTutorial onFinish={handleTutorialFinish} />}
 
       {/* Global Top Bar - Hidden on Chat AND Map views */}
-      {currentView !== ViewName.CHAT && currentView !== ViewName.MAP && (
-        <div className="flex-shrink-0 bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-600 dark:from-emerald-900 dark:via-teal-900 dark:to-cyan-900 p-4 pb-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] shadow-lg shadow-emerald-500/10 rounded-b-[2rem] relative z-20 transition-all duration-300">
+      <div className={`flex-shrink-0 bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-600 dark:from-emerald-900 dark:via-teal-900 dark:to-cyan-900 p-4 pb-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] shadow-lg shadow-emerald-500/10 rounded-b-[2rem] relative z-20 transition-all duration-300 ${currentView === ViewName.CHAT || currentView === ViewName.MAP ? 'hidden' : 'block'}`}>
           <div className="flex justify-between items-center text-white">
-            
-            {/* New Logo Section */}
             <div className="flex items-center space-x-3">
                <div className="bg-white/90 backdrop-blur-sm p-1.5 rounded-2xl shadow-sm">
                   <LogoIcon className="w-8 h-8" />
@@ -553,7 +434,6 @@ const AppContent: React.FC = () => {
                </div>
             </div>
 
-            {/* Actions: 911 + Settings */}
             <div className="flex items-center gap-2">
                 <a 
                     href="tel:911" 
@@ -574,11 +454,41 @@ const AppContent: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
 
-      {/* Main Content Area */}
-      <main className={`flex-1 relative overflow-hidden bg-transparent transition-all duration-300 ${currentView !== ViewName.CHAT && currentView !== ViewName.MAP ? '-mt-6 pt-6 z-10' : ''}`}>
-        {renderView()}
+      {/* Main Content Area - Keep Alive Logic */}
+      <main className={`flex-1 relative overflow-hidden bg-transparent ${currentView !== ViewName.CHAT && currentView !== ViewName.MAP ? '-mt-6 pt-6 z-10' : ''}`}>
+         {/* Home */}
+         <div className={currentView === ViewName.HOME ? 'h-full w-full block' : 'hidden'}>
+            <HomeView onChangeView={handleChangeView} />
+         </div>
+
+         {/* Natural */}
+         {loadedViews.has(ViewName.NATURAL) && (
+            <div className={currentView === ViewName.NATURAL ? 'h-full w-full block' : 'hidden'}>
+               <NaturalView />
+            </div>
+         )}
+
+         {/* Chat */}
+         {loadedViews.has(ViewName.CHAT) && (
+            <div className={currentView === ViewName.CHAT ? 'h-full w-full block' : 'hidden'}>
+               <ChatView />
+            </div>
+         )}
+
+         {/* Map - Always keep alive once loaded */}
+         {loadedViews.has(ViewName.MAP) && (
+             <div className={currentView === ViewName.MAP ? 'h-full w-full block' : 'hidden'}>
+                <MapView onOpenSettings={() => setIsSettingsOpen(true)} />
+             </div>
+         )}
+
+         {/* Auxilio */}
+         {loadedViews.has(ViewName.AUXILIO) && (
+            <div className={currentView === ViewName.AUXILIO ? 'h-full w-full block' : 'hidden'}>
+               <AuxilioView />
+            </div>
+         )}
       </main>
 
       {/* Bottom Navigation */}

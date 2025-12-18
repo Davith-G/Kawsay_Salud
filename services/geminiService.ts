@@ -9,7 +9,7 @@ if (!apiKey) {
   console.warn("API_KEY no encontrada. Asegúrate de configurar el archivo .env y vite.config.ts");
 }
 
-const ai = new GoogleGenAI({ apiKey: apiKey || "AIzaSyA24XStj2NsAJTXoupUGyBqOlS3RBfSk-0" });
+const ai = new GoogleGenAI({ apiKey: apiKey || "AIzaSyCSTNRmF2qs-YXdW5ZDTf4z39Z0QtArFbA" });
 
 /**
  * Chatbot Service using Gemini 3 Pro Preview
