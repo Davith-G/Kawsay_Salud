@@ -1,161 +1,100 @@
-import { useState, useEffect, useCallback, useContext } from 'react';
+import { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { LanguageContext } from '../App';
-
-// Type definitions for Web Speech API
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionResultList {
-  length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  length: number;
-  item(index: number): SpeechRecognitionAlternative;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-  transcript: string;
-  confidence: number;
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onstart: (event: Event) => void;
-  onend: (event: Event) => void;
-  onresult: (event: SpeechRecognitionEvent) => void;
-  onerror: (event: any) => void;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: {
-      new (): SpeechRecognition;
-    };
-    webkitSpeechRecognition: {
-      new (): SpeechRecognition;
-    };
-  }
-}
+import { SpeechRecognition } from '@capacitor-community/speech-recognition';
+import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
 
 export const useSpeechRecognition = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
-  const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
   const { language } = useContext(LanguageContext);
   const [error, setError] = useState<string | null>(null);
+  const webRecognitionRef = useRef<any>(null);
+  const isNative = Capacitor.isNativePlatform();
 
-  useEffect(() => {
-    // Check browser support
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (SpeechRecognition) {
-      const recognitionInstance = new SpeechRecognition();
-      recognitionInstance.continuous = false; // Stop after one sentence for simple input
-      recognitionInstance.interimResults = true; // Show results as they speak
-
-      recognitionInstance.onstart = () => {
-        setIsListening(true);
-        setError(null);
-      };
-
-      recognitionInstance.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionInstance.onresult = (event: SpeechRecognitionEvent) => {
-        let finalTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          }
-        }
-        if (finalTranscript) {
-             setTranscript(finalTranscript);
-        }
-      };
-
-      recognitionInstance.onerror = (event: any) => {
-        // Silently handle 'no-speech' (timeout due to silence)
-        if (event.error === 'no-speech') {
-            setIsListening(false);
-            return;
-        }
-
-        console.error("Speech recognition error", event.error);
-        
-        let errorMessage = `Error: ${event.error}`;
-        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-            errorMessage = "Permiso de micrófono denegado. Ve a Configuración de la App > Permisos y habilita el Micrófono.";
-            // Alert user visually in mobile context
-            alert(errorMessage);
-        } else if (event.error === 'network') {
-            errorMessage = "Error de red. El reconocimiento de voz necesita internet.";
-        }
-
-        setError(errorMessage);
-        setIsListening(false);
-      };
-
-      setRecognition(recognitionInstance);
-    } else {
-        console.warn("Speech Recognition API not supported in this browser/webview.");
+  const stopNativeListening = async () => {
+    setIsListening(false);
+    setTranscript(''); // LIMPIEZA: Borra el texto para que no pase a otra vista
+    try {
+      await SpeechRecognition.stop();
+      await SpeechRecognition.removeAllListeners(); // LIMPIEZA: Mata procesos viejos
+    } catch (e) {
+      console.warn("Stop error:", e);
     }
-  }, []);
+  };
 
-  // Update language when app language changes
-  useEffect(() => {
-      if (recognition) {
-          // Map app languages to BCP 47 tags
-          // 'es' -> 'es-ES' (or es-419 for Latin America)
-          // 'en' -> 'en-US'
-          // 'qu' -> 'qu-EC' (Kichwa Ecuador)
-          switch(language) {
-              case 'es': recognition.lang = 'es-EC'; break;
-              case 'en': recognition.lang = 'en-US'; break;
-              case 'qu': recognition.lang = 'qu-EC'; break; // Browser support varies
-              default: recognition.lang = 'es-EC';
-          }
+  const startNativeListening = async () => {
+    try {
+      // 1. Limpiar cualquier basura de otras páginas antes de empezar
+      await SpeechRecognition.removeAllListeners(); 
+      
+      const { speechRecognition } = await SpeechRecognition.checkPermissions();
+      if (speechRecognition !== 'granted') {
+        const status = await SpeechRecognition.requestPermissions();
+        if (status.speechRecognition !== 'granted') return;
       }
-  }, [language, recognition]);
+
+      setTranscript('');
+      setError(null);
+      setIsListening(true);
+
+      await SpeechRecognition.start({
+        language: language === 'en' ? 'en-US' : 'es-EC',
+        maxResults: 2,
+        partialResults: true,
+        popup: false,
+      });
+
+      // 2. Escuchar solo en esta instancia
+      SpeechRecognition.addListener('partialResults', (data: any) => {
+        if (data.matches && data.matches.length > 0) {
+          setTranscript(data.matches[0]);
+        }
+      });
+
+    } catch (e: any) {
+      setIsListening(false);
+    }
+  };
+
+  const stopWebListening = () => {
+    setIsListening(false);
+    setTranscript('');
+    if (webRecognitionRef.current) webRecognitionRef.current.stop();
+  };
+
+  const startWebListening = () => {
+    const SpeechChoice = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechChoice) return;
+    const recognition = new SpeechChoice();
+    webRecognitionRef.current = recognition;
+    recognition.interimResults = true;
+    recognition.lang = language === 'en' ? 'en-US' : 'es-EC';
+    recognition.onstart = () => { setIsListening(true); setError(null); };
+    recognition.onend = () => setIsListening(false);
+    recognition.onresult = (e: any) => setTranscript(e.results[0][0].transcript);
+    recognition.start();
+  };
 
   const startListening = useCallback(() => {
-    setTranscript('');
-    setError(null);
-    if (recognition) {
-      try {
-        recognition.start();
-      } catch (e) {
-        console.error("Error starting speech recognition:", e);
-      }
-    } else {
-        alert("Tu dispositivo no soporta el reconocimiento de voz nativo o necesita Google App instalada.");
-    }
-  }, [recognition]);
+    if (isNative) startNativeListening();
+    else startWebListening();
+  }, [isNative, language]);
 
   const stopListening = useCallback(() => {
-    if (recognition) {
-      recognition.stop();
-    }
-  }, [recognition]);
+    if (isNative) stopNativeListening();
+    else stopWebListening();
+  }, [isNative]);
 
-  return {
-    isListening,
-    transcript,
-    startListening,
-    stopListening,
-    error,
-    hasSupport: !!(window.SpeechRecognition || window.webkitSpeechRecognition)
-  };
+  useEffect(() => {
+    const appListener = App.addListener('appStateChange', ({ isActive }) => {
+        if (!isActive) stopListening();
+    });
+    return () => {
+      stopListening();
+      appListener.then(h => h.remove());
+    };
+  }, [stopListening]);
+
+  return { isListening, transcript, startListening, stopListening, error, hasSupport: isNative || !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) };
 };
