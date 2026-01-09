@@ -2,6 +2,8 @@
 
 ## Run Locally
 
+Tener en cuenta que este colocada la api correctamente para que funcione de manera local.
+
 **Prerequisites:**  Node.js
 
 
